@@ -1,0 +1,45 @@
+{
+	"scope": "/",
+	"lang": "en-IN",
+	"start_url": "/",
+	"name": "MoistureMate",
+	"display": "standalone",
+	"theme_color": "#2084c6",
+	"orientation": "portrait",
+	"short_name": "MoistureMate",
+	"background_color": "#ffffff",
+	"description": "MoistureMate is a PWA that connects to AWS IoT Core to monitor plant moisture levels in real-time. Get instant updates, track trends, and manually control the water pump—all from your phone! 🌱💧",
+	"icons": [
+		{
+			"sizes": "64x64",
+			"type": "image/png",
+			"src": "/pwa-64x64.png"
+		},
+		{
+			"sizes": "192x192",
+			"type": "image/png",
+			"src": "/pwa-192x192.png"
+		},
+		{
+			"sizes": "512x512",
+			"type": "image/png",
+			"src": "/pwa-512x512.png"
+		},
+		{
+			"sizes": "512x512",
+			"type": "image/png",
+			"purpose": "maskable",
+			"src": "/maskable-icon-512x512.png"
+		},
+		{
+			"sizes": "180x180",
+			"type": "image/png",
+			"src": "/apple-touch-icon-180x180.png"
+		},
+		{
+			"sizes": "32x32",
+			"type": "image/png",
+			"src": "/favicon.png"
+		}
+	]
+}
