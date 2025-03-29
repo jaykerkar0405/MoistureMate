@@ -5,4 +5,5 @@
 <div>
 	<img src="/img/logo.svg" alt="Company Logo" />
 	<SignIn provider="google" signInPage="signin" />
+	<SignIn provider="github" signInPage="signin" />
 </div>
