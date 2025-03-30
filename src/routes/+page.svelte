@@ -154,7 +154,7 @@
 <div class="min-h-screen bg-gray-900 text-white">
 	<div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
 		<header class="mb-8 flex items-center justify-between">
-			<h1 class="text-3xl font-bold">Manage</h1>
+			<h1 class="text-3xl font-bold">Manage Plants</h1>
 			<button
 				class="rounded-md bg-blue-600 px-4 py-2 font-medium text-white transition-colors hover:bg-blue-700"
 				on:click={openAddModal}
