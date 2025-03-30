@@ -14,11 +14,11 @@ interface Locals {
 }
 
 export const load = async (event: Event) => {
-	const protectedRoutes = ['/'];
+	const publicRoutes = ['/auth'];
 	const pathname = event.url.pathname;
 	const session = await event.locals.auth();
 
-	if (!session && protectedRoutes.includes(pathname)) {
+	if (!session && !publicRoutes.some((route) => pathname.startsWith(route))) {
 		throw redirect(302, '/auth');
 	}
 

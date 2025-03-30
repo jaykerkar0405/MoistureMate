@@ -14,7 +14,7 @@
 				<button
 					class="flex w-full cursor-pointer items-center justify-center gap-3 rounded-lg border border-gray-600 bg-gray-700 px-4 py-3 font-medium text-gray-200 hover:bg-gray-600"
 				>
-					<SignIn provider="google">
+					<SignIn provider="google" callbackUrl="/">
 						<div slot="submitButton" class="flex cursor-pointer items-center gap-3">
 							<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="20" height="20">
 								<path
@@ -42,7 +42,7 @@
 				<button
 					class="flex w-full cursor-pointer items-center justify-center gap-3 rounded-lg border border-gray-600 bg-gray-700 px-4 py-3 font-medium text-gray-200 hover:bg-gray-600"
 				>
-					<SignIn provider="github">
+					<SignIn provider="github" callbackUrl="/">
 						<div slot="submitButton" class="flex cursor-pointer items-center gap-3">
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
