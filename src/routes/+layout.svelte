@@ -1,10 +1,11 @@
 <script lang="ts">
 	import '../app.css';
-	import Header from '$lib/components/Header.svelte';
+	import { page } from '$app/stores';
+	import Header from '../components/Header.svelte';
 </script>
 
-<Header />
+<Header session={$page.data.session} />
 
-<main>
+<main class="mt-16">
 	<slot />
 </main>
