@@ -25,3 +25,5 @@ certs/rootCA.pem
 certs/private.key
 certs/certificate.pem
 src/routes/api/iot/+server.ts
+
+.vercel
