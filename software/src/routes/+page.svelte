@@ -14,6 +14,7 @@
 	let error: string | null = null;
 	let isModalOpen: boolean = false;
 	let formElement: HTMLFormElement;
+	let initialFocusElement: HTMLElement;
 	let currentPlant: Plant = { id: '', name: '', subscribeTopic: '', publishTopic: '' };
 
 	async function fetchPlants(): Promise<void> {
@@ -116,6 +117,19 @@
 		currentPlant = { id: '', name: '', subscribeTopic: '', publishTopic: '' };
 	}
 
+	function handleKeydown(event: KeyboardEvent): void {
+		if (event.key === 'Escape') {
+			closeModal();
+		}
+	}
+
+	function handleModalClick(event: MouseEvent): void {
+		const target = event.target as HTMLElement;
+		if (target.classList.contains('modal-backdrop')) {
+			closeModal();
+		}
+	}
+
 	async function handleSubmit(event: SubmitEvent): Promise<void> {
 		event.preventDefault();
 		if (!formElement) return;
@@ -168,6 +182,8 @@
 				<div class="flex items-center justify-center py-12">
 					<div
 						class="h-12 w-12 animate-spin rounded-full border-b-2 border-t-2 border-blue-500"
+						role="status"
+						aria-label="Loading"
 					></div>
 				</div>
 			{:else if error}
@@ -283,14 +299,28 @@
 
 	{#if isModalOpen}
 		<div
-			class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-			on:click={closeModal}
 			role="dialog"
 			aria-modal="true"
+			aria-labelledby="dialog-title"
+			class="fixed inset-0 z-50 flex items-center justify-center"
+			on:keydown={handleKeydown}
+			tabindex="0"
 		>
-			<div class="mx-4 w-full max-w-md rounded-lg bg-gray-800 shadow-xl" on:click|stopPropagation>
+			<button
+				class="modal-backdrop fixed inset-0 bg-black/50"
+				on:click={closeModal}
+				aria-label="Close modal"
+			></button>
+
+			<div
+				class="relative z-10 mx-4 w-full max-w-md rounded-lg bg-gray-800 shadow-xl"
+				role="document"
+				bind:this={initialFocusElement}
+			>
 				<div class="flex items-center justify-between border-b border-gray-700 p-4">
-					<h2 class="text-xl font-semibold">{isEditing ? 'Edit Plant' : 'Add New Plant'}</h2>
+					<h2 id="dialog-title" class="text-xl font-semibold">
+						{isEditing ? 'Edit Plant' : 'Add New Plant'}
+					</h2>
 					<button
 						class="rounded-full p-1 text-gray-400 transition-colors hover:bg-gray-700 hover:text-white"
 						on:click={closeModal}

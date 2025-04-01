@@ -1,8 +1,13 @@
 import ora from 'ora';
 import path from 'path';
 import chalk from 'chalk';
-import { CERT_DIR } from '$env/static/private';
 import awsIot, { type device as IoTDevice } from 'aws-iot-device-sdk';
+
+function getCertDir() {
+	return path.join(process.cwd(), 'certs');
+}
+
+const CERT_DIR = getCertDir();
 
 export interface LatestMessage {
 	topic: string;
