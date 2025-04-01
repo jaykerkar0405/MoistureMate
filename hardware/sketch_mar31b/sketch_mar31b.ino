@@ -5,40 +5,37 @@
 #include <PubSubClient.h>
 #include <WiFiClientSecure.h>
 
-// Pin definitions
 const int PUMP_RELAY_PIN = D1;
 const int MOISTURE_SENSOR_PIN = A0;
 
-// Operation mode constants
 #define AUTO_MODE true
 #define MANUAL_MODE false
 
-// Log level definitions
-#define LOG_LEVEL_ERROR 0
-#define LOG_LEVEL_WARNING 1
 #define LOG_LEVEL_INFO 2
+#define LOG_LEVEL_ERROR 0
 #define LOG_LEVEL_DEBUG 3
-int currentLogLevel = LOG_LEVEL_INFO; // Default log level
+#define LOG_LEVEL_WARNING 1
+int currentLogLevel = LOG_LEVEL_INFO;
 
-// System variables
 bool pumpRunning = false;
 int moistureThreshold = 30;
 bool operationMode = AUTO_MODE;
+unsigned long lastLoopTime = 0;
 unsigned long pumpStartTime = 0;
 unsigned long lastPublishTime = 0;
 const int publishInterval = 60000;
 const unsigned long maxPumpRuntime = 30000;
 
-// WiFi & MQTT Clients
+int lastMoistureLevel = -1;
+int moistureChangeThreshold = 2;
+
 WiFiClientSecure wifiClient;
 PubSubClient mqttClient(wifiClient);
 
-// Global certificate objects
 BearSSL::X509List cert(AWS_CERT_CA);
 BearSSL::X509List client_crt(AWS_CERT_CRT);
 BearSSL::PrivateKey key(AWS_CERT_PRIVATE);
 
-// Function prototypes
 void connectToAWS();
 void connectToWiFi();
 void publishStatus();
@@ -46,56 +43,56 @@ String getTimestamp();
 void checkPumpTimeout();
 int readMoistureSensor();
 void activatePump(bool state);
-void messageHandler(char* topic, byte* payload, unsigned int length);
+void printProgressBar(int percent, int width);
 void logMessage(int level, const char* module, const char* message);
+void messageHandler(char* topic, byte* payload, unsigned int length);
+void printLogBox(int level, const char* module, const char* message);
 void logMessagef(int level, const char* module, const char* format, ...);
 
 void setup() {
-  // Initialize serial communication
   Serial.begin(115200);
-  delay(1000); // Allow serial to initialize
+  delay(100);
 
-  // Set pin modes
   pinMode(PUMP_RELAY_PIN, OUTPUT);
   pinMode(MOISTURE_SENSOR_PIN, INPUT);
-
-  // Ensure pump is off at startup (active LOW relay)
   digitalWrite(PUMP_RELAY_PIN, HIGH);
 
-  // Print header with version info
   Serial.println();
-  Serial.println("╔════════════════════════════════════════════════════╗");
-  Serial.println("║          ESP8266 AWS IoT Plant Watering System     ║");
-  Serial.println("║                     Version 1.0                    ║");
-  Serial.println("╚════════════════════════════════════════════════════╝");
-  
+  Serial.println("╔════════════════════════════════════════════════════════════════╗");
+  Serial.println("║                                                                ║");
+  Serial.println("║            ESP8266 AWS IoT Plant Watering System               ║");
+  Serial.println("║                         Version 1.2                            ║");
+  Serial.println("║                                                                ║");
+  Serial.println("╚════════════════════════════════════════════════════════════════╝");
+
   logMessage(LOG_LEVEL_INFO, "INIT", "System starting up...");
 
-  // Connect to WiFi
   connectToWiFi();
 
-  // Configure SSL/TLS certificates
   wifiClient.setTrustAnchors(&cert);
   wifiClient.setClientRSACert(&client_crt, &key);
 
-  // Set time via NTP - required for X.509 certificate validation
   logMessage(LOG_LEVEL_INFO, "TIME", "Synchronizing with NTP servers...");
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-  
+
   time_t now = time(nullptr);
   int dots = 0;
+
+  Serial.println("┌────────────────────────────────────────────────────┐");
+  Serial.print("│ NTP Synchronization ");
+
   while (now < 8 * 3600 * 2) {
-    delay(500);
+    delay(100);
     if (dots % 20 == 0) {
-      Serial.println();
-      Serial.print("[TIME] Waiting for NTP sync: ");
+      Serial.print("\n│ ");
     }
-    Serial.print(".");
+    Serial.print("▫");
     dots++;
     now = time(nullptr);
   }
-  Serial.println();
-  
+
+  Serial.println("\n└────────────────────────────────────────────────────┘");
+
   char timeBuffer[25];
   struct tm timeinfo;
   localtime_r(&now, &timeinfo);
@@ -104,126 +101,148 @@ void setup() {
           timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
   logMessagef(LOG_LEVEL_INFO, "TIME", "Time synchronized: %s", timeBuffer);
 
-  // Set MQTT client
   mqttClient.setServer(AWS_ENDPOINT, 8883);
   mqttClient.setCallback(messageHandler);
 
-  // Connect to AWS IoT
   connectToAWS();
 
   logMessage(LOG_LEVEL_INFO, "INIT", "System initialization complete");
-  logMessagef(LOG_LEVEL_INFO, "CONF", "Current settings: Mode=%s, Threshold=%d%, MaxPumpTime=%ds", 
-              operationMode ? "AUTO" : "MANUAL", moistureThreshold, maxPumpRuntime/1000);
-  
-  Serial.println("╔════════════════════════════════════════════════════╗");
-  Serial.println("║                 System is running                  ║");
-  Serial.println("╚════════════════════════════════════════════════════╝");
+  logMessagef(LOG_LEVEL_INFO, "CONF", "Current settings: Mode=%s, Threshold=%d%, MaxPumpTime=%ds, MoistureChangeThreshold=%d%",
+              operationMode ? "AUTO" : "MANUAL", moistureThreshold, maxPumpRuntime / 1000, moistureChangeThreshold);
+
+  Serial.println("╔════════════════════════════════════════════════════════════════╗");
+  Serial.println("║                                                                ║");
+  Serial.println("║                      System is running                         ║");
+  Serial.println("║                                                                ║");
+  Serial.println("╚════════════════════════════════════════════════════════════════╝");
+
+  lastLoopTime = millis();
 }
 
 void loop() {
-  // Check WiFi connection
+  unsigned long currentMillis = millis();
+
   if (WiFi.status() != WL_CONNECTED) {
     logMessage(LOG_LEVEL_ERROR, "WIFI", "Connection lost. Reconnecting...");
     connectToWiFi();
   }
 
-  // Check MQTT connection
   if (!mqttClient.connected()) {
     connectToAWS();
   }
 
-  // Process MQTT messages
   mqttClient.loop();
 
-  // Read moisture level
-  int moistureLevel = readMoistureSensor();
+  static unsigned long lastSensorRead = 0;
+  static int moistureLevel = 0;
 
-  // Automatic mode logic
-  if (operationMode == AUTO_MODE) {
-    // If moisture is below threshold and pump is not running, turn it on
-    if (moistureLevel < moistureThreshold && !pumpRunning) {
-      logMessagef(LOG_LEVEL_INFO, "AUTO", "Moisture low (%d%% < %d%%). Activating pump.", 
-                 moistureLevel, moistureThreshold);
-      activatePump(true);
-      pumpStartTime = millis();
+  if (currentMillis - lastSensorRead >= 100) {
+    moistureLevel = readMoistureSensor();
+    lastSensorRead = currentMillis;
+
+    if (lastMoistureLevel == -1 || abs(moistureLevel - lastMoistureLevel) >= moistureChangeThreshold) {
+      logMessagef(LOG_LEVEL_INFO, "SENSOR", "Moisture change detected: %d%% → %d%%",
+                  lastMoistureLevel, moistureLevel);
+
+      publishStatus();
+      lastMoistureLevel = moistureLevel;
     }
+  }
 
-    // If moisture is above threshold and pump is running, turn it off
-    else if (moistureLevel >= moistureThreshold && pumpRunning) {
-      logMessagef(LOG_LEVEL_INFO, "AUTO", "Moisture restored (%d%% >= %d%%). Deactivating pump.", 
-                 moistureLevel, moistureThreshold);
+  if (operationMode == AUTO_MODE) {
+    if (moistureLevel < moistureThreshold && !pumpRunning) {
+      logMessagef(LOG_LEVEL_INFO, "AUTO", "Moisture low (%d%% < %d%%). Activating pump.",
+                  moistureLevel, moistureThreshold);
+      activatePump(true);
+      pumpStartTime = currentMillis;
+    } else if (moistureLevel >= moistureThreshold && pumpRunning) {
+      logMessagef(LOG_LEVEL_INFO, "AUTO", "Moisture restored (%d%% >= %d%%). Deactivating pump.",
+                  moistureLevel, moistureThreshold);
       activatePump(false);
     }
   }
 
-  // Check pump timeout (safety feature)
   checkPumpTimeout();
 
-  // Publish sensor data periodically
-  if (millis() - lastPublishTime > publishInterval) {
+  if (currentMillis - lastPublishTime > publishInterval) {
     publishStatus();
-    lastPublishTime = millis();
+    lastPublishTime = currentMillis;
   }
 
-  delay(1000);
+  static unsigned long lastStatusLog = 0;
+  if (currentMillis - lastStatusLog > 5000 && currentLogLevel >= LOG_LEVEL_DEBUG) {
+    logMessagef(LOG_LEVEL_DEBUG, "SYSTEM", "Loop time: %ld ms, Moisture: %d%%",
+                currentMillis - lastLoopTime, moistureLevel);
+    lastStatusLog = currentMillis;
+  }
+
+  delay(10);
+  lastLoopTime = currentMillis;
 }
 
-// Connect to WiFi network
 void connectToWiFi() {
   logMessagef(LOG_LEVEL_INFO, "WIFI", "Connecting to network: %s", WIFI_SSID);
 
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
+  Serial.println("┌────────────────────────────────────────────────────┐");
+  Serial.println("│ WiFi Connection Status                             │");
+
   int attempts = 0;
   while (WiFi.status() != WL_CONNECTED) {
     if (attempts % 20 == 0) {
-      Serial.println();
-      Serial.print("[WIFI] Connection attempt: ");
+      Serial.println("│                                                    │");
+      Serial.print("│ Attempt: ");
+      Serial.print(attempts);
+      Serial.print(" ");
     }
-    delay(500);
-    Serial.print(".");
+    delay(100);
+    Serial.print("▫");
     attempts++;
-    
-    // After 60 seconds (120 attempts), restart connection process
-    if (attempts > 120) {
-      logMessage(LOG_LEVEL_ERROR, "WIFI", "Connection timeout. Retrying from scratch...");
+
+    if (attempts > 300) {
+      Serial.println("\n│ Connection timeout. Retrying...                    │");
       WiFi.disconnect();
-      delay(1000);
+      delay(100);
       WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
       attempts = 0;
     }
   }
 
+  Serial.println("\n└────────────────────────────────────────────────────┘");
+
   char ipBuffer[20];
-  sprintf(ipBuffer, "%d.%d.%d.%d", 
+  sprintf(ipBuffer, "%d.%d.%d.%d",
           WiFi.localIP()[0], WiFi.localIP()[1], WiFi.localIP()[2], WiFi.localIP()[3]);
-  
+
   logMessage(LOG_LEVEL_INFO, "WIFI", "Connection established");
   logMessagef(LOG_LEVEL_INFO, "WIFI", "IP address: %s", ipBuffer);
   logMessagef(LOG_LEVEL_DEBUG, "WIFI", "Signal strength: %d dBm", WiFi.RSSI());
 }
 
-// Connect to AWS IoT Core
 void connectToAWS() {
   logMessage(LOG_LEVEL_INFO, "MQTT", "Connecting to AWS IoT Core...");
+
+  Serial.println("┌────────────────────────────────────────────────────┐");
+  Serial.println("│ AWS IoT Connection                                 │");
 
   int attempts = 0;
   while (!mqttClient.connected()) {
     if (mqttClient.connect(CLIENT_ID)) {
+      Serial.println("│ ✓ Connected successfully                           │");
+      Serial.println("└────────────────────────────────────────────────────┘");
+
       logMessage(LOG_LEVEL_INFO, "MQTT", "Connected to AWS IoT Core");
 
-      // Subscribe to control topic
       mqttClient.subscribe(CONTROL_TOPIC);
       logMessagef(LOG_LEVEL_INFO, "MQTT", "Subscribed to topic: %s", CONTROL_TOPIC);
 
-      // Publish initial status
       publishStatus();
     } else {
       int state = mqttClient.state();
-      
-      // Map error codes to readable messages
+
       const char* errorMsg;
-      switch(state) {
+      switch (state) {
         case -4: errorMsg = "Connection timeout"; break;
         case -3: errorMsg = "Connection lost"; break;
         case -2: errorMsg = "Connect failed"; break;
@@ -235,32 +254,37 @@ void connectToAWS() {
         case 5: errorMsg = "Not authorized"; break;
         default: errorMsg = "Unknown error"; break;
       }
-      
+
+      if (attempts % 3 == 0) {
+        Serial.print("│ ✗ Connection attempt ");
+        Serial.print(attempts);
+        Serial.print(": ");
+        Serial.print(errorMsg);
+        Serial.println("              │");
+      }
+
       logMessagef(LOG_LEVEL_ERROR, "MQTT", "Connection failed: %s (code: %d)", errorMsg, state);
-      
+
       attempts++;
       if (attempts % 3 == 0) {
         logMessagef(LOG_LEVEL_WARNING, "MQTT", "Multiple connection failures. Check credentials and network.");
       }
-      
-      delay(5000);
+
+      delay(200);
     }
   }
 }
 
-// MQTT message handler
 void messageHandler(char* topic, byte* payload, unsigned int length) {
-  // Create a buffer for the payload
   char message[length + 1];
   for (unsigned int i = 0; i < length; i++) {
     message[i] = (char)payload[i];
   }
   message[length] = '\0';
-  
+
   logMessagef(LOG_LEVEL_DEBUG, "MQTT", "Message received on topic: %s", topic);
   logMessagef(LOG_LEVEL_DEBUG, "MQTT", "Payload: %s", message);
 
-  // Parse JSON
   StaticJsonDocument<200> doc;
   DeserializationError error = deserializeJson(doc, message);
 
@@ -269,7 +293,6 @@ void messageHandler(char* topic, byte* payload, unsigned int length) {
     return;
   }
 
-  // Process commands
   const char* command = doc["command"];
 
   if (strcmp(command, "pump") == 0) {
@@ -294,7 +317,6 @@ void messageHandler(char* topic, byte* payload, unsigned int length) {
       operationMode = AUTO_MODE;
       logMessage(LOG_LEVEL_INFO, "MODE", "Switched to AUTO mode");
 
-      // If pump was running in manual mode, turn it off
       if (pumpRunning) {
         logMessage(LOG_LEVEL_INFO, "MODE", "Auto-disabling pump due to mode change");
         activatePump(false);
@@ -303,7 +325,6 @@ void messageHandler(char* topic, byte* payload, unsigned int length) {
       operationMode = MANUAL_MODE;
       logMessage(LOG_LEVEL_INFO, "MODE", "Switched to MANUAL mode");
 
-      // If pump was running in auto mode, turn it off
       if (pumpRunning) {
         logMessage(LOG_LEVEL_INFO, "MODE", "Auto-disabling pump due to mode change");
         activatePump(false);
@@ -314,62 +335,70 @@ void messageHandler(char* topic, byte* payload, unsigned int length) {
     if (newThreshold >= 0 && newThreshold <= 100) {
       int oldThreshold = moistureThreshold;
       moistureThreshold = newThreshold;
-      logMessagef(LOG_LEVEL_INFO, "CONF", "Moisture threshold updated: %d%% -> %d%%", 
-                 oldThreshold, moistureThreshold);
+      logMessagef(LOG_LEVEL_INFO, "CONF", "Moisture threshold updated: %d%% → %d%%",
+                  oldThreshold, moistureThreshold);
     } else {
-      logMessagef(LOG_LEVEL_WARNING, "CONF", "Invalid threshold value received: %d (valid range: 0-100)", 
-                 newThreshold);
+      logMessagef(LOG_LEVEL_WARNING, "CONF", "Invalid threshold value received: %d (valid range: 0-100)",
+                  newThreshold);
+    }
+  } else if (strcmp(command, "change_threshold") == 0) {
+    int newThreshold = doc["value"];
+    if (newThreshold >= 1 && newThreshold <= 20) {
+      int oldThreshold = moistureChangeThreshold;
+      moistureChangeThreshold = newThreshold;
+      logMessagef(LOG_LEVEL_INFO, "CONF", "Moisture change threshold updated: %d%% → %d%%",
+                  oldThreshold, moistureChangeThreshold);
+    } else {
+      logMessagef(LOG_LEVEL_WARNING, "CONF", "Invalid change threshold value received: %d (valid range: 1-20)",
+                  newThreshold);
     }
   } else if (strcmp(command, "log_level") == 0) {
     int newLevel = doc["level"];
     if (newLevel >= LOG_LEVEL_ERROR && newLevel <= LOG_LEVEL_DEBUG) {
       int oldLevel = currentLogLevel;
       currentLogLevel = newLevel;
-      
-      const char* levelNames[] = {"ERROR", "WARNING", "INFO", "DEBUG"};
-      logMessagef(LOG_LEVEL_INFO, "CONF", "Log level changed: %s -> %s", 
-                 levelNames[oldLevel], levelNames[currentLogLevel]);
+
+      const char* levelNames[] = { "ERROR", "WARNING", "INFO", "DEBUG" };
+      logMessagef(LOG_LEVEL_INFO, "CONF", "Log level changed: %s → %s",
+                  levelNames[oldLevel], levelNames[currentLogLevel]);
     }
   } else {
     logMessagef(LOG_LEVEL_WARNING, "CMD", "Unknown command received: %s", command);
   }
 
-  // Publish updated status after command
   publishStatus();
 }
 
-// Read moisture sensor and convert to percentage
 int readMoistureSensor() {
   int wetValue = 300;
   int dryValue = 1023;
   int rawValue = analogRead(MOISTURE_SENSOR_PIN);
 
-  // Calculate percentage (inverted: 0% = dry, 100% = wet)
   int moisturePercentage = map(rawValue, dryValue, wetValue, 0, 100);
-
-  // Constrain to valid range
   moisturePercentage = constrain(moisturePercentage, 0, 100);
 
-  logMessagef(LOG_LEVEL_DEBUG, "SENSOR", "Raw moisture value: %d", rawValue);
-  logMessagef(LOG_LEVEL_DEBUG, "SENSOR", "Moisture percentage: %d%%", moisturePercentage);
+  static unsigned long lastLogTime = 0;
+  if (millis() - lastLogTime > 5000 && currentLogLevel >= LOG_LEVEL_DEBUG) {
+    logMessagef(LOG_LEVEL_DEBUG, "SENSOR", "Raw moisture value: %d", rawValue);
+    logMessagef(LOG_LEVEL_DEBUG, "SENSOR", "Moisture percentage: %d%%", moisturePercentage);
+    lastLogTime = millis();
+  }
 
   return moisturePercentage;
 }
 
-// Control the water pump - MODIFIED FOR ACTIVE LOW RELAY
 void activatePump(bool state) {
   if (state) {
-    digitalWrite(PUMP_RELAY_PIN, LOW);  // Active LOW relay
+    digitalWrite(PUMP_RELAY_PIN, LOW);
     pumpRunning = true;
     logMessagef(LOG_LEVEL_INFO, "PUMP", "Activated at %s", getTimestamp().c_str());
   } else {
-    digitalWrite(PUMP_RELAY_PIN, HIGH);  // Active LOW relay
+    digitalWrite(PUMP_RELAY_PIN, HIGH);
     pumpRunning = false;
-    
-    // If pump was running, calculate how long it was on
+
     if (pumpStartTime > 0) {
       unsigned long pumpRuntime = millis() - pumpStartTime;
-      logMessagef(LOG_LEVEL_INFO, "PUMP", "Deactivated. Run time: %.1f seconds", pumpRuntime/1000.0);
+      logMessagef(LOG_LEVEL_INFO, "PUMP", "Deactivated. Run time: %.1f seconds", pumpRuntime / 1000.0);
       pumpStartTime = 0;
     } else {
       logMessage(LOG_LEVEL_INFO, "PUMP", "Deactivated");
@@ -377,12 +406,9 @@ void activatePump(bool state) {
   }
 }
 
-// Publish system status to AWS IoT
 void publishStatus() {
-  // Read current moisture level
   int moistureLevel = readMoistureSensor();
 
-  // Create JSON document
   StaticJsonDocument<200> doc;
 
   doc["deviceId"] = CLIENT_ID;
@@ -393,23 +419,23 @@ void publishStatus() {
   doc["mode"] = operationMode ? "auto" : "manual";
   doc["uptime"] = millis() / 1000;
   doc["rssi"] = WiFi.RSSI();
+  doc["changeThreshold"] = moistureChangeThreshold;
 
-  // Serialize JSON to string
   char jsonBuffer[256];
   serializeJson(doc, jsonBuffer);
 
   logMessage(LOG_LEVEL_DEBUG, "MQTT", "Publishing status to AWS IoT");
-  
-  // Publish to AWS IoT
+
   if (mqttClient.publish(STATUS_TOPIC, jsonBuffer)) {
     logMessage(LOG_LEVEL_INFO, "MQTT", "Status published successfully");
     logMessagef(LOG_LEVEL_DEBUG, "MQTT", "Status payload: %s", jsonBuffer);
+
+    lastPublishTime = millis();
   } else {
     logMessage(LOG_LEVEL_ERROR, "MQTT", "Failed to publish status");
   }
 }
 
-// Get current timestamp from system time
 String getTimestamp() {
   time_t now;
   struct tm timeinfo;
@@ -424,46 +450,136 @@ String getTimestamp() {
   return String(timeString);
 }
 
-// Safety feature to prevent pump from running too long
 void checkPumpTimeout() {
   if (pumpRunning && (millis() - pumpStartTime > maxPumpRuntime)) {
-    logMessagef(LOG_LEVEL_WARNING, "SAFETY", "Pump timeout reached (%d seconds). Force stopping.", 
-               maxPumpRuntime/1000);
+    logMessagef(LOG_LEVEL_WARNING, "SAFETY", "Pump timeout reached (%d seconds). Force stopping.",
+                maxPumpRuntime / 1000);
     activatePump(false);
   }
 }
 
-// Logging with level control and consistent formatting
-void logMessage(int level, const char* module, const char* message) {
-  // Skip if message level is higher than current log level
-  if (level > currentLogLevel) return;
-  
-  // Level labels
-  const char* levelLabels[] = {"ERROR", "WARN ", "INFO ", "DEBUG"};
-  
-  // Format: [TIME][LEVEL][MODULE] Message
+void printProgressBar(int percent, int width) {
+  int filledWidth = (width * percent) / 100;
   Serial.print("[");
-  Serial.print(getTimestamp());
-  Serial.print("][");
-  Serial.print(levelLabels[level]);
-  Serial.print("][");
-  Serial.print(module);
+  for (int i = 0; i < width; i++) {
+    if (i < filledWidth) Serial.print("■");
+    else Serial.print(" ");
+  }
   Serial.print("] ");
-  Serial.println(message);
+  Serial.print(percent);
+  Serial.println("%");
 }
 
-// Formatted logging with variable arguments
-void logMessagef(int level, const char* module, const char* format, ...) {
-  // Skip if message level is higher than current log level
+void printLogBox(int level, const char* module, const char* message) {
+  const char* levelSymbols[] = { "✗", "⚠", "ℹ", "⚙" };
+  const char* levelColors[] = { "\033[1;31m", "\033[1;33m", "\033[1;32m", "\033[1;34m" };
+  const char* resetColor = "\033[0m";
+
+  Serial.print("┌─");
+  for (int i = 0; i < 62; i++) Serial.print("─");
+  Serial.println("┐");
+
+  Serial.print("│ ");
+  Serial.print(levelColors[level]);
+  Serial.print(levelSymbols[level]);
+  Serial.print(" [");
+  Serial.print(module);
+  Serial.print("]");
+  Serial.print(resetColor);
+
+  int paddingLength = 57 - strlen(module);
+  for (int i = 0; i < paddingLength; i++) Serial.print(" ");
+  Serial.println("│");
+
+  Serial.println("│                                                              │");
+
+  int msgLen = strlen(message);
+  int startPos = 0;
+  while (startPos < msgLen) {
+    Serial.print("│  ");
+    int charsThisLine = 0;
+    for (int i = 0; i < 60 && (startPos + i) < msgLen; i++) {
+      Serial.print(message[startPos + i]);
+      charsThisLine++;
+    }
+
+    for (int i = charsThisLine; i < 60; i++) Serial.print(" ");
+    Serial.println("  │");
+
+    startPos += 60;
+  }
+
+  Serial.println("│                                                              │");
+  Serial.print("└─");
+  for (int i = 0; i < 62; i++) Serial.print("─");
+  Serial.println("┘");
+}
+
+void logMessage(int level, const char* module, const char* message) {
   if (level > currentLogLevel) return;
-  
-  // Format the message using sprintf-style formatting
+
+  const char* levelLabels[] = { "ERROR", "WARN ", "INFO ", "DEBUG" };
+  const char* levelColors[] = { "\033[1;31m", "\033[1;33m", "\033[1;36m", "\033[1;35m" };
+  const char* resetColor = "\033[0m";
+
+  Serial.print(levelColors[level]);
+  Serial.print("┌── ");
+  Serial.print(levelLabels[level]);
+  Serial.print(" ───");
+  for (int i = 0; i < 53; i++) Serial.print("─");
+  Serial.println("┐");
+
+  Serial.print("│ [");
+  Serial.print(getTimestamp());
+  Serial.print("] [");
+  Serial.print(module);
+  Serial.print("] ");
+
+  int lineLen = 14 + strlen(module) + strlen(message);
+  if (lineLen <= 64) {
+    Serial.print(message);
+    for (int i = 0; i < (64 - lineLen); i++) Serial.print(" ");
+    Serial.println("│");
+  } else {
+    int msgLen = strlen(message);
+    int startPos = 0;
+    int firstLineSpace = 64 - 14 - strlen(module);
+
+    for (int i = 0; i < firstLineSpace && i < msgLen; i++) {
+      Serial.print(message[i]);
+    }
+    Serial.println("│");
+
+    startPos = firstLineSpace;
+    while (startPos < msgLen) {
+      Serial.print("│ ");
+      int charsThisLine = 0;
+      for (int i = 0; i < 61 && (startPos + i) < msgLen; i++) {
+        Serial.print(message[startPos + i]);
+        charsThisLine++;
+      }
+
+      for (int i = charsThisLine; i < 61; i++) Serial.print(" ");
+      Serial.println("│");
+
+      startPos += 61;
+    }
+  }
+
+  Serial.print("└");
+  for (int i = 0; i < 66; i++) Serial.print("─");
+  Serial.println("┘");
+  Serial.print(resetColor);
+}
+
+void logMessagef(int level, const char* module, const char* format, ...) {
+  if (level > currentLogLevel) return;
+
   char buffer[256];
   va_list args;
   va_start(args, format);
   vsnprintf(buffer, sizeof(buffer), format, args);
   va_end(args);
-  
-  // Use the base logging function
+
   logMessage(level, module, buffer);
 }
