@@ -1,8 +1,8 @@
 import {
 	AUTH_GITHUB_ID,
 	AUTH_GOOGLE_ID,
-	AUTH_GITHUB_SECRET,
-	AUTH_GOOGLE_SECRET
+	AUTH_GOOGLE_SECRET,
+	AUTH_GITHUB_SECRET
 } from '$env/static/private';
 import { PrismaClient } from '@prisma/client';
 import { SvelteKitAuth } from '@auth/sveltekit';
@@ -12,6 +12,7 @@ import GitHub from '@auth/sveltekit/providers/github';
 const prisma = new PrismaClient();
 
 export const { handle, signIn } = SvelteKitAuth({
+	trustHost: true,
 	providers: [
 		Google({ clientId: AUTH_GOOGLE_ID, clientSecret: AUTH_GOOGLE_SECRET }),
 		GitHub({ clientId: AUTH_GITHUB_ID, clientSecret: AUTH_GITHUB_SECRET })
@@ -40,6 +41,9 @@ export const { handle, signIn } = SvelteKitAuth({
 				console.error('Error during user creation:', error);
 				return false;
 			}
+		},
+		async redirect({ baseUrl }) {
+			return baseUrl;
 		}
 	}
 });
