@@ -167,7 +167,7 @@
 			{#if isLoading}
 				<div class="flex items-center justify-center py-12">
 					<div
-						class="h-12 w-12 animate-spin rounded-full border-t-2 border-b-2 border-blue-500"
+						class="h-12 w-12 animate-spin rounded-full border-b-2 border-t-2 border-blue-500"
 					></div>
 				</div>
 			{:else if error}
@@ -197,19 +197,19 @@
 							<thead class="bg-gray-700">
 								<tr>
 									<th
-										class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-300 uppercase"
+										class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-300"
 										>Name</th
 									>
 									<th
-										class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-300 uppercase"
+										class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-300"
 										>Subscribe Topic</th
 									>
 									<th
-										class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-300 uppercase"
+										class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-300"
 										>Publish Topic</th
 									>
 									<th
-										class="px-6 py-3 text-right text-xs font-medium tracking-wider text-gray-300 uppercase"
+										class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-300"
 										>Actions</th
 									>
 								</tr>
@@ -217,14 +217,16 @@
 							<tbody class="divide-y divide-gray-700">
 								{#each plants as plant (plant.id)}
 									<tr class="transition-colors hover:bg-gray-700/50">
-										<td class="px-6 py-4 whitespace-nowrap">{plant.name}</td>
-										<td class="px-6 py-4 font-mono text-sm whitespace-nowrap text-gray-300"
+										<td class="whitespace-nowrap px-6 py-4"
+											><a href="/plant/{plant.id}">{plant.name}</a></td
+										>
+										<td class="whitespace-nowrap px-6 py-4 font-mono text-sm text-gray-300"
 											>{plant.subscribeTopic}</td
 										>
-										<td class="px-6 py-4 font-mono text-sm whitespace-nowrap text-gray-300"
+										<td class="whitespace-nowrap px-6 py-4 font-mono text-sm text-gray-300"
 											>{plant.publishTopic}</td
 										>
-										<td class="px-6 py-4 text-right text-sm font-medium whitespace-nowrap">
+										<td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
 											<div class="flex justify-end gap-2">
 												<button
 													class="rounded p-1 text-gray-400 transition-colors hover:bg-gray-700 hover:text-white"
@@ -319,7 +321,7 @@
 								name="name"
 								required
 								value={currentPlant.name}
-								class="w-full rounded-md border border-gray-600 bg-gray-700 px-3 py-2 text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+								class="w-full rounded-md border border-gray-600 bg-gray-700 px-3 py-2 text-white focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
 							/>
 						</div>
 
@@ -334,7 +336,7 @@
 								required
 								value={currentPlant.subscribeTopic}
 								placeholder="plants/[name]/status"
-								class="w-full rounded-md border border-gray-600 bg-gray-700 px-3 py-2 text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+								class="w-full rounded-md border border-gray-600 bg-gray-700 px-3 py-2 text-white focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
 							/>
 							<p class="mt-1 text-xs text-gray-400">Topic to receive plant status updates</p>
 						</div>
@@ -348,7 +350,7 @@
 								required
 								value={currentPlant.publishTopic}
 								placeholder="plants/[name]/control"
-								class="w-full rounded-md border border-gray-600 bg-gray-700 px-3 py-2 text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+								class="w-full rounded-md border border-gray-600 bg-gray-700 px-3 py-2 text-white focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
 							/>
 							<p class="mt-1 text-xs text-gray-400">Topic to send control commands</p>
 						</div>

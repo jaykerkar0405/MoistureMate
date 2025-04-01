@@ -15,7 +15,7 @@
 </script>
 
 <header
-	class="fixed top-0 right-0 left-0 z-50 flex h-16 items-center justify-between border-b transition-all duration-300 {scrolled
+	class="fixed left-0 right-0 top-0 z-50 flex h-16 items-center justify-between border-b transition-all duration-300 {scrolled
 		? 'border-gray-700 bg-gray-800/95 backdrop-blur-sm'
 		: 'border-transparent bg-gray-800/80'} px-4 py-3 text-white"
 >
@@ -45,14 +45,14 @@
 					class="relative h-9 w-9 cursor-pointer rounded-full border-2 border-gray-800 shadow-md transition-all duration-300 group-hover:scale-105"
 				/>
 				<div
-					class="absolute right-0 bottom-0 h-2.5 w-2.5 rounded-full border border-gray-800 bg-green-500 shadow-sm"
+					class="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border border-gray-800 bg-green-500 shadow-sm"
 				></div>
 			</div>
 		</div>
 	{:else}
 		<a
 			href="/auth"
-			class="rounded-md bg-gradient-to-r from-blue-600 to-blue-500 px-6 py-2 text-base font-medium shadow-md transition-all duration-300 hover:from-blue-500 hover:to-cyan-500 hover:shadow-lg focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-gray-800 focus:outline-none"
+			class="rounded-md bg-gradient-to-r from-blue-600 to-blue-500 px-6 py-2 text-base font-medium shadow-md transition-all duration-300 hover:from-blue-500 hover:to-cyan-500 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-gray-800"
 		>
 			Sign In
 		</a>
